@@ -28,8 +28,8 @@ static const uint32_t N_COUNTERS = 1 << DIGIT_BITS;
 static const uint32_t N_SUMS = N_COUNTERS / SORT_BLOCKDIM;
 extern __shared__ uint32_t counters[/*N_COUNTERS*/];
 
-__device__ __forceinline__ uint32_t
-pack(uint32_t a, uint32_t mask, uint32_t b) {
+__device__ __forceinline__ uint32_t pack(uint32_t a, uint32_t mask,
+                                         uint32_t b) {
   uint32_t ret;
 
   asm("lop3.b32 %0, %1, %2, %3, 0xb8;" // a & ~mask | mask & b
@@ -39,8 +39,8 @@ pack(uint32_t a, uint32_t mask, uint32_t b) {
   return ret;
 }
 
-__device__ __forceinline__ uint32_t
-sum_up(uint32_t sum, const uint32_t limit = WARP_SZ) {
+__device__ __forceinline__ uint32_t sum_up(uint32_t sum,
+                                           const uint32_t limit = WARP_SZ) {
 #pragma unroll
   for (uint32_t off = 1; off < limit; off <<= 1)
     asm("{ .reg.b32 %v; .reg.pred %did;"
@@ -57,7 +57,7 @@ __device__ __forceinline__ void zero_counters() {
 #if DIGIT_BITS >= 12
 #pragma unroll
   for (uint32_t i = 0; i < N_SUMS / 4; i++)
-    ((uint4*)counters)[threadIdx.x + i * SORT_BLOCKDIM] = uint4{0, 0, 0, 0};
+    ((uint4 *)counters)[threadIdx.x + i * SORT_BLOCKDIM] = uint4{0, 0, 0, 0};
 #else
 #pragma unroll
   for (uint32_t i = 0; i < N_SUMS; i++)
@@ -66,13 +66,10 @@ __device__ __forceinline__ void zero_counters() {
   __syncthreads();
 }
 
-__device__ __forceinline__ void count_digits(
-    const uint32_t src[],
-    uint32_t base,
-    uint32_t len,
-    uint32_t lshift,
-    uint32_t rshift,
-    uint32_t mask) {
+__device__ __forceinline__ void count_digits(const uint32_t src[],
+                                             uint32_t base, uint32_t len,
+                                             uint32_t lshift, uint32_t rshift,
+                                             uint32_t mask) {
   zero_counters();
 
   const uint32_t pack_mask = 0xffffffffU << lshift;
@@ -89,15 +86,11 @@ __device__ __forceinline__ void count_digits(
   __syncthreads();
 }
 
-__device__ __forceinline__ void scatter(
-    uint2 dst[],
-    const uint32_t src[],
-    uint32_t base,
-    uint32_t len,
-    uint32_t lshift,
-    uint32_t rshift,
-    uint32_t mask,
-    uint32_t pidx[] = nullptr) {
+__device__ __forceinline__ void scatter(uint2 dst[], const uint32_t src[],
+                                        uint32_t base, uint32_t len,
+                                        uint32_t lshift, uint32_t rshift,
+                                        uint32_t mask,
+                                        uint32_t pidx[] = nullptr) {
   const uint32_t pack_mask = 0xffffffffU << lshift;
 
   src += base;
@@ -114,19 +107,14 @@ __device__ __forceinline__ void scatter(
   }
 }
 
-__device__ static void upper_sort(
-    uint2 dst[],
-    const uint32_t src[],
-    uint32_t len,
-    uint32_t lsbits,
-    uint32_t bits,
-    uint32_t digit,
-    uint32_t histogram[]) {
+__device__ static void upper_sort(uint2 dst[], const uint32_t src[],
+                                  uint32_t len, uint32_t lsbits, uint32_t bits,
+                                  uint32_t digit, uint32_t histogram[]) {
   uint32_t grid_div = 31 - __clz(gridDim.x);
   uint32_t grid_rem = (1 << grid_div) - 1;
 
   uint32_t slice = len >> grid_div; // / gridDim.x;
-  uint32_t rem = len & grid_rem; // % gridDim.x;
+  uint32_t rem = len & grid_rem;    // % gridDim.x;
   uint32_t base;
 
   if (blockIdx.x < rem)
@@ -150,15 +138,15 @@ __device__ static void upper_sort(
   const uint32_t warpid = threadIdx.x / WARP_SZ;
   const uint32_t laneid = threadIdx.x % WARP_SZ;
   const uint32_t sub_warpid = laneid >> grid_div; // / gridDim.x;
-  const uint32_t sub_laneid = laneid & grid_rem; // % gridDim.x;
-  const uint32_t stride = WARP_SZ >> grid_div; // / gridDim.x;
+  const uint32_t sub_laneid = laneid & grid_rem;  // % gridDim.x;
+  const uint32_t stride = WARP_SZ >> grid_div;    // / gridDim.x;
 
   uint2 h = uint2{0, 0};
   uint32_t sum, warp_off = warpid * WARP_SZ * N_SUMS + sub_warpid;
 
 #pragma unroll 1
   for (uint32_t i = 0; i < WARP_SZ * N_SUMS; i += stride, warp_off += stride) {
-    auto* hptr = &histogram[warp_off << digit];
+    auto *hptr = &histogram[warp_off << digit];
 
     sum = (warp_off < 1 << bits) ? hptr[2 + sub_laneid] : 0;
     sum = sum_up(sum) + h.x;
@@ -173,7 +161,7 @@ __device__ static void upper_sort(
     h.y = __shfl_down_sync(0xffffffff, sum, gridDim.x - 1) - h.x;
 
     if (blockIdx.x == 0 && sub_laneid == 0 && warp_off < 1 << bits)
-      *(uint2*)hptr = h;
+      *(uint2 *)hptr = h;
 
     h.x = __shfl_sync(0xffffffff, sum, WARP_SZ - 1, WARP_SZ);
   }
@@ -222,10 +210,8 @@ __device__ static void upper_sort(
   __syncthreads();
 }
 
-__device__ __forceinline__ void count_digits(
-    const uint2 src[],
-    uint32_t len,
-    uint32_t mask) {
+__device__ __forceinline__ void count_digits(const uint2 src[], uint32_t len,
+                                             uint32_t mask) {
   zero_counters();
 
   // count occurrences of each digit
@@ -235,11 +221,8 @@ __device__ __forceinline__ void count_digits(
   __syncthreads();
 }
 
-__device__ __forceinline__ void scatter(
-    uint32_t dst[],
-    const uint2 src[],
-    uint32_t len,
-    uint32_t mask) {
+__device__ __forceinline__ void scatter(uint32_t dst[], const uint2 src[],
+                                        uint32_t len, uint32_t mask) {
 #pragma unroll 1 // the subroutine is memory-io-bound, unrolling makes no
                  // difference
   for (uint32_t i = threadIdx.x; i < len; i += SORT_BLOCKDIM) {
@@ -249,13 +232,9 @@ __device__ __forceinline__ void scatter(
   }
 }
 
-__device__ __noinline__ static void lower_sort(
-    uint32_t dst[],
-    const uint2 src[],
-    uint32_t base,
-    uint32_t len,
-    uint32_t histogram[],
-    uint32_t bits = DIGIT_BITS) {
+__device__ __noinline__ static void
+lower_sort(uint32_t dst[], const uint2 src[], uint32_t base, uint32_t len,
+           uint32_t histogram[], uint32_t bits = DIGIT_BITS) {
   const uint32_t mask = (1 << bits) - 1;
 
   count_digits(src += base, len, mask);
@@ -312,13 +291,9 @@ __device__ __noinline__ static void lower_sort(
   __syncthreads();
 }
 
-__device__ __forceinline__ void sort_row(
-    uint32_t inout[],
-    size_t len,
-    uint2 temp[],
-    uint32_t histogram[],
-    uint32_t wbits,
-    uint32_t lsbits) {
+__device__ __forceinline__ void sort_row(uint32_t inout[], size_t len,
+                                         uint2 temp[], uint32_t histogram[],
+                                         uint32_t wbits, uint32_t lsbits) {
   assert(len <= (1U << 31) && wbits <= 2 * DIGIT_BITS && gridDim.x <= WARP_SZ);
 
   uint32_t lg_gridDim = 31 - __clz(gridDim.x);
@@ -338,7 +313,7 @@ __device__ __forceinline__ void sort_row(
 
 #pragma unroll 1
     for (uint32_t i = blockIdx.x; i < 1 << top_bits; i += gridDim.x) {
-      uint2 slice = *(uint2*)histogram;
+      uint2 slice = *(uint2 *)histogram;
       lower_sort(inout, temp, slice.x, slice.y, histogram, low_bits);
       histogram += gridDim.x << low_bits;
     }
@@ -366,26 +341,15 @@ __device__ __forceinline__ void sort_row(
   }
 }
 
-__launch_bounds__(SORT_BLOCKDIM) __global__ void sort(
-    uint32_t* inouts,
-    size_t len,
-    uint32_t win,
-    const uint32_t temp_stride,
-    const uint32_t digit_stride,
-    const uint32_t hist_stride,
-    uint2* temps,
-    uint32_t* histograms,
-    uint32_t wbits,
-    uint32_t lsbits0,
-    uint32_t lsbits1) {
+__launch_bounds__(SORT_BLOCKDIM) __global__
+    void sort(uint32_t *inouts, size_t len, uint32_t win,
+              const uint32_t temp_stride, const uint32_t digit_stride,
+              const uint32_t hist_stride, uint2 *temps, uint32_t *histograms,
+              uint32_t wbits, uint32_t lsbits0, uint32_t lsbits1) {
   win += blockIdx.y;
-  sort_row(
-      inouts + win * digit_stride,
-      len,
-      temps + blockIdx.y * temp_stride,
-      histograms + win * hist_stride,
-      wbits,
-      blockIdx.y == 0 ? lsbits0 : lsbits1);
+  sort_row(inouts + win * digit_stride, len, temps + blockIdx.y * temp_stride,
+           histograms + win * hist_stride, wbits,
+           blockIdx.y == 0 ? lsbits0 : lsbits1);
 }
 
 #undef asm

@@ -17,21 +17,15 @@ namespace native {
 #error "invalid BATCH_ADD_NSTREAMS"
 #endif
 
-template <
-    class bucket_t,
-    class affine_h,
-    class bucket_h = class bucket_t::mem_t,
-    class affine_t = class bucket_t::affine_t>
-__device__ __forceinline__ static void add(
-    bucket_h ret[],
-    const affine_h points[],
-    uint32_t npoints,
-    const uint32_t bitmap[],
-    const uint32_t refmap[],
-    bool accumulate,
+template <class bucket_t, class affine_h,
+          class bucket_h = class bucket_t::mem_t,
+          class affine_t = class bucket_t::affine_t>
+__device__ __forceinline__ static void
+add(bucket_h ret[], const affine_h points[], uint32_t npoints,
+    const uint32_t bitmap[], const uint32_t refmap[], bool accumulate,
     uint32_t sid) {
   static __device__ uint32_t streams[BATCH_ADD_NSTREAMS];
-  uint32_t& current = streams[sid % BATCH_ADD_NSTREAMS];
+  uint32_t &current = streams[sid % BATCH_ADD_NSTREAMS];
 
   const uint32_t degree = bucket_t::degree;
   const uint32_t warp_sz = WARP_SZ / degree;
@@ -113,48 +107,32 @@ __device__ __forceinline__ static void add(
     current = 0;
 }
 
-template <
-    class bucket_t,
-    class affine_h,
-    class bucket_h = class bucket_t::mem_t,
-    class affine_t = class bucket_t::affine_t>
-__launch_bounds__(BATCH_ADD_BLOCK_SIZE) __global__ void batch_addition(
-    bucket_h ret[],
-    const affine_h points[],
-    uint32_t npoints,
-    const uint32_t bitmap[],
-    bool accumulate = false,
-    uint32_t sid = 0) {
+template <class bucket_t, class affine_h,
+          class bucket_h = class bucket_t::mem_t,
+          class affine_t = class bucket_t::affine_t>
+__launch_bounds__(BATCH_ADD_BLOCK_SIZE) __global__
+    void batch_addition(bucket_h ret[], const affine_h points[],
+                        uint32_t npoints, const uint32_t bitmap[],
+                        bool accumulate = false, uint32_t sid = 0) {
   add<bucket_t>(ret, points, npoints, bitmap, nullptr, accumulate, sid);
 }
 
-template <
-    class bucket_t,
-    class affine_h,
-    class bucket_h = class bucket_t::mem_t,
-    class affine_t = class bucket_t::affine_t>
-__launch_bounds__(BATCH_ADD_BLOCK_SIZE) __global__ void batch_diff(
-    bucket_h ret[],
-    const affine_h points[],
-    uint32_t npoints,
-    const uint32_t bitmap[],
-    const uint32_t refmap[],
-    bool accumulate = false,
-    uint32_t sid = 0) {
+template <class bucket_t, class affine_h,
+          class bucket_h = class bucket_t::mem_t,
+          class affine_t = class bucket_t::affine_t>
+__launch_bounds__(BATCH_ADD_BLOCK_SIZE) __global__
+    void batch_diff(bucket_h ret[], const affine_h points[], uint32_t npoints,
+                    const uint32_t bitmap[], const uint32_t refmap[],
+                    bool accumulate = false, uint32_t sid = 0) {
   add<bucket_t>(ret, points, npoints, bitmap, refmap, accumulate, sid);
 }
 
-template <
-    class bucket_t,
-    class affine_h,
-    class bucket_h = class bucket_t::mem_t,
-    class affine_t = class bucket_t::affine_t>
-__launch_bounds__(BATCH_ADD_BLOCK_SIZE) __global__ void batch_addition(
-    bucket_h ret[],
-    affine_h points[],
-    size_t npoints,
-    const uint32_t digits[],
-    const uint32_t& ndigits) {
+template <class bucket_t, class affine_h,
+          class bucket_h = class bucket_t::mem_t,
+          class affine_t = class bucket_t::affine_t>
+__launch_bounds__(BATCH_ADD_BLOCK_SIZE) __global__
+    void batch_addition(bucket_h ret[], affine_h points[], size_t npoints,
+                        const uint32_t digits[], const uint32_t &ndigits) {
   const uint32_t degree = bucket_t::degree;
   const uint32_t warp_sz = WARP_SZ / degree;
   const uint32_t tid = (threadIdx.x + blockDim.x * blockIdx.x) / degree;
@@ -184,16 +162,14 @@ __launch_bounds__(BATCH_ADD_BLOCK_SIZE) __global__ void batch_addition(
     ret[tid / warp_sz] = acc;
 }
 
-template <class bucket_t>
-bucket_t sum_up(const bucket_t inp[], size_t n) {
+template <class bucket_t> bucket_t sum_up(const bucket_t inp[], size_t n) {
   bucket_t sum = inp[0];
   for (size_t i = 1; i < n; i++)
     sum.add(inp[i]);
   return sum;
 }
 
-template <class bucket_t>
-bucket_t sum_up(const std::vector<bucket_t>& inp) {
+template <class bucket_t> bucket_t sum_up(const std::vector<bucket_t> &inp) {
   return sum_up(&inp[0], inp.size());
 }
 

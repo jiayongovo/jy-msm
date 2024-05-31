@@ -15,15 +15,15 @@
 #include <sched.h>
 #endif
 
-#include <math.h>
-#include <stddef.h>
-#include <stdint.h>
+#include "ec/jacobian_t.hpp"
+#include "ec/xyzz_t.hpp"
 #include <cassert>
 #include <cstdio>
 #include <iostream>
+#include <math.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <vector>
-#include "ec/jacobian_t.hpp"
-#include "ec/xyzz_t.hpp"
 
 namespace at {
 namespace native {
@@ -47,12 +47,12 @@ namespace native {
 #endif
 
 class semaphore_t {
- private:
+private:
   size_t counter;
   std::mutex mtx;
   std::condition_variable cvar;
 
- public:
+public:
   semaphore_t() : counter(0) {}
 
   void notify() {
@@ -69,7 +69,7 @@ class semaphore_t {
 };
 
 class thread_pool_t {
- private:
+private:
   std::vector<std::thread> threads;
 
   std::mutex mtx; // Inter-thread synchronization
@@ -103,12 +103,12 @@ class thread_pool_t {
       }));
   }
 
- public:
+public:
   thread_pool_t(unsigned int num_threads = 0) : done(false) {
     init(num_threads);
   }
 
-  thread_pool_t(const char* affinity_env) : done(false) {
+  thread_pool_t(const char *affinity_env) : done(false) {
 #ifdef _GNU_SOURCE
     while ((affinity_env = getenv(affinity_env))) {
       if (affinity_env[0] != '0')
@@ -159,22 +159,19 @@ class thread_pool_t {
   virtual ~thread_pool_t() {
     done = true;
     cvar.notify_all();
-    for (auto& tid : threads)
+    for (auto &tid : threads)
       tid.join();
   }
 
-  size_t size() const {
-    return threads.size();
-  }
+  size_t size() const { return threads.size(); }
 
-  template <class Workable>
-  void spawn(Workable work) {
+  template <class Workable> void spawn(Workable work) {
     std::unique_lock<std::mutex> lock(mtx);
     fifo.emplace_back(work);
     cvar.notify_one(); // wake up a worker thread
   }
 
- private:
+private:
   bool execute() {
     job_t work;
     {
@@ -194,15 +191,12 @@ class thread_pool_t {
     return true;
   }
 
- public:
+public:
   // call work(size_t idx) with idx=[0..num_items) in parallel, e.g.
   // pool.par_map(20, [&](size_t i) { std::cout << i << std::endl; });
   template <class Workable>
-  void par_map(
-      size_t num_items,
-      size_t stride,
-      Workable work,
-      size_t max_workers = 0) {
+  void par_map(size_t num_items, size_t stride, Workable work,
+               size_t max_workers = 0) {
     size_t num_steps = (num_items + stride - 1) / stride;
     size_t num_workers = std::min(size(), num_steps);
     if (max_workers > 0)
@@ -256,15 +250,14 @@ class thread_pool_t {
 #endif
 };
 
-template <class T>
-class channel_t {
- private:
+template <class T> class channel_t {
+private:
   std::deque<T> fifo;
   std::mutex mtx;
   std::condition_variable cvar;
 
- public:
-  void send(const T& msg) {
+public:
+  void send(const T &msg) {
     std::unique_lock<std::mutex> lock(mtx);
     fifo.push_back(msg);
     cvar.notify_one();
@@ -279,44 +272,33 @@ class channel_t {
   }
 };
 
-template <typename T>
-class counter_t {
+template <typename T> class counter_t {
   struct inner {
     std::atomic<T> val;
     std::atomic<size_t> ref_cnt;
-    inline inner(T v) {
-      val = v, ref_cnt = 1;
-    };
+    inline inner(T v) { val = v, ref_cnt = 1; };
   };
-  inner* ptr;
+  inner *ptr;
 
- public:
-  counter_t(T v = 0) {
-    ptr = new inner(v);
-  }
-  counter_t(const counter_t& r) {
+public:
+  counter_t(T v = 0) { ptr = new inner(v); }
+  counter_t(const counter_t &r) {
     (ptr = r.ptr)->ref_cnt.fetch_add(1, std::memory_order_relaxed);
   }
   ~counter_t() {
     if (ptr->ref_cnt.fetch_sub(1, std::memory_order_seq_cst) == 1)
       delete ptr;
   }
-  counter_t& operator=(const counter_t& r) = delete;
-  size_t ref_cnt() const {
-    return ptr->ref_cnt;
-  }
+  counter_t &operator=(const counter_t &r) = delete;
+  size_t ref_cnt() const { return ptr->ref_cnt; }
   T operator++(int) const {
     return ptr->val.fetch_add(1, std::memory_order_relaxed);
   }
-  T operator++() const {
-    return ptr->val++ + 1;
-  }
+  T operator++() const { return ptr->val++ + 1; }
   T operator--(int) const {
     return ptr->val.fetch_sub(1, std::memory_order_relaxed);
   }
-  T operator--() const {
-    return ptr->val-- - 1;
-  }
+  T operator--() const { return ptr->val-- - 1; }
 };
 
 constexpr static int lg2(size_t n) {
@@ -326,8 +308,7 @@ constexpr static int lg2(size_t n) {
   return ret;
 }
 
-template <class bucket_t>
-bucket_t sum_up(const bucket_t inp[], size_t n) {
+template <class bucket_t> bucket_t sum_up(const bucket_t inp[], size_t n) {
   bucket_t sum = inp[0];
   for (size_t i = 1; i < n; i++) {
     sum.add(inp[i]);
@@ -335,32 +316,24 @@ bucket_t sum_up(const bucket_t inp[], size_t n) {
   return sum;
 }
 
-template <
-    class bucket_t,
-    class point_t,
-    class affine_t,
-    class scalar_t,
-    typename affine_h = typename affine_t::mem_t,
-    typename bucket_h = typename bucket_t::mem_t>
+template <class bucket_t, class point_t, class affine_t, class scalar_t,
+          typename affine_h = typename affine_t::mem_t,
+          typename bucket_h = typename bucket_t::mem_t>
 class collect_t {
- public:
+public:
   size_t npoints;
   uint32_t wbits, nwins;
 
   class result_t {
     bucket_t ret[MSM_NTHREADS / bucket_t::degree][2];
 
-   public:
+  public:
     result_t() {}
-    inline operator decltype(ret)&() {
-      return ret;
-    }
-    inline const bucket_t* operator[](size_t i) const {
-      return ret[i];
-    }
+    inline operator decltype(ret) &() { return ret; }
+    inline const bucket_t *operator[](size_t i) const { return ret[i]; }
   };
 
- public:
+public:
   collect_t(size_t np) {
     npoints = (np + WARP_SZ - 1) & ((size_t)0 - WARP_SZ);
     // Ensure that npoints are multiples of WARP_SZ and are as close as possible
@@ -377,12 +350,9 @@ class collect_t {
     nwins = (scalar_t::bit_length() - 1) / wbits + 1;
   }
 
- public:
-  void collect(
-      point_t* out,
-      bucket_t* res,
-      const bucket_t* ones,
-      uint32_t lenofone) {
+public:
+  void collect(point_t *out, bucket_t *res, const bucket_t *ones,
+               uint32_t lenofone) {
     struct tile_t {
       uint32_t x, y, dy;
       point_t p;
@@ -418,8 +388,8 @@ class collect_t {
         for (size_t work; (work = counter++) < total;) {
           auto item = &grid[work];
           auto y = item->y;
-          item->p = integrate_row(
-              res + y * MSM_NTHREADS / bucket_t::degree * 2, item->dy);
+          item->p = integrate_row(res + y * MSM_NTHREADS / bucket_t::degree * 2,
+                                  item->dy);
           if (++row_sync[y] == 1)
             ch.send(y);
         }
@@ -447,8 +417,8 @@ class collect_t {
     out->add(one);
   }
 
- public:
-  point_t integrate_row(bucket_t* row, uint32_t lsbits) {
+public:
+  point_t integrate_row(bucket_t *row, uint32_t lsbits) {
     const int NTHRBITS = lg2(MSM_NTHREADS / bucket_t::degree);
 
     assert(wbits - 1 > NTHRBITS);
